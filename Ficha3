@@ -1,0 +1,440 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Centinela · Alarma para tienda con micro:bit</title>
+<style>
+  :root{
+    --ink:#0d1b1e;
+    --paper:#eef2ee;
+    --steel:#2f4858;
+    --alert:#d6502f;
+    --safe:#2f7a52;
+    --brass:#c9a04d;
+    --line: rgba(13,27,30,0.14);
+    --mono: 'JetBrains Mono', 'Courier New', monospace;
+    --display: 'Bebas Neue', 'Arial Narrow', sans-serif;
+    --body: 'Inter', system-ui, sans-serif;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0;
+    background:var(--paper);
+    color:var(--ink);
+    font-family:var(--body);
+    padding:32px 16px 64px;
+  }
+  .wrap{max-width:900px;margin:0 auto;}
+
+  header{
+    border-bottom:3px solid var(--ink);
+    padding-bottom:18px;
+    margin-bottom:28px;
+    display:flex;
+    justify-content:space-between;
+    align-items:flex-end;
+    flex-wrap:wrap;
+    gap:12px;
+  }
+  .eyebrow{
+    font-family:var(--mono);
+    font-size:11px;
+    letter-spacing:.14em;
+    text-transform:uppercase;
+    color:var(--steel);
+    margin:0 0 6px;
+  }
+  h1{
+    font-family:var(--display);
+    font-size:clamp(36px,7vw,58px);
+    letter-spacing:.01em;
+    margin:0;
+    line-height:.95;
+  }
+  .badge{
+    font-family:var(--mono);
+    font-size:11px;
+    border:1px solid var(--ink);
+    padding:6px 10px;
+    border-radius:2px;
+    white-space:nowrap;
+  }
+
+  .stage{
+    background:var(--ink);
+    color:var(--paper);
+    border-radius:6px;
+    padding:28px;
+    position:relative;
+    overflow:hidden;
+  }
+  .stage::before{
+    content:"";
+    position:absolute; inset:0;
+    background:
+      linear-gradient(transparent 95%, rgba(238,242,238,0.06) 95%),
+      linear-gradient(90deg, transparent 95%, rgba(238,242,238,0.06) 95%);
+    background-size:28px 28px;
+    pointer-events:none;
+  }
+
+  .status-row{
+    display:flex;
+    align-items:center;
+    gap:14px;
+    margin-bottom:22px;
+    position:relative;
+    z-index:1;
+  }
+  .lamp{
+    width:16px;height:16px;border-radius:50%;
+    background:#445;
+    box-shadow:inset 0 0 0 2px rgba(238,242,238,0.25);
+    transition:background .25s, box-shadow .25s;
+    flex-shrink:0;
+  }
+  .lamp.armed{background:var(--brass); box-shadow:0 0 14px var(--brass);}
+  .lamp.alert{background:var(--alert); box-shadow:0 0 18px var(--alert); animation:pulse 0.6s infinite;}
+  .lamp.safe{background:var(--safe); box-shadow:0 0 10px var(--safe);}
+  @keyframes pulse{50%{opacity:.35;}}
+
+  .status-text{font-family:var(--mono); font-size:13px; letter-spacing:.04em;}
+  .status-text .label{opacity:.6;}
+  .status-text .value{font-weight:700;}
+
+  .floor{
+    display:grid;
+    grid-template-columns: 1fr 1.3fr;
+    gap:24px;
+    position:relative;
+    z-index:1;
+  }
+  @media (max-width:620px){ .floor{grid-template-columns:1fr;} }
+
+  .shopfront{
+    background:rgba(238,242,238,0.04);
+    border:1px solid rgba(238,242,238,0.14);
+    border-radius:4px;
+    padding:20px;
+    min-height:230px;
+    display:flex;
+    flex-direction:column;
+    justify-content:space-between;
+  }
+  .door{
+    width:90px;height:140px;
+    border:3px solid var(--paper);
+    border-radius:2px;
+    margin:0 auto;
+    position:relative;
+    transform-origin:left center;
+    transition:transform .5s cubic-bezier(.4,1.4,.5,1);
+  }
+  .door.open{transform: perspective(400px) rotateY(55deg);}
+  .door .knob{
+    position:absolute; right:10px; top:50%;
+    width:6px;height:6px;border-radius:50%;
+    background:var(--brass);
+  }
+  .sensor-led{
+    width:10px;height:10px;border-radius:50%;
+    background:#445;
+    position:absolute; top:-4px; left:-4px;
+    transition:background .2s, box-shadow .2s;
+  }
+  .sensor-led.tripped{ background:var(--alert); box-shadow:0 0 10px var(--alert); }
+  .door-wrap{position:relative; width:90px; margin:0 auto;}
+
+  .caption{font-family:var(--mono); font-size:11px; text-align:center; opacity:.6; margin-top:14px;}
+
+  .panel{
+    background:rgba(238,242,238,0.04);
+    border:1px solid rgba(238,242,238,0.14);
+    border-radius:4px;
+    padding:20px;
+  }
+  .panel h2{
+    font-family:var(--mono);
+    font-size:11px;
+    text-transform:uppercase;
+    letter-spacing:.12em;
+    margin:0 0 14px;
+    opacity:.7;
+    font-weight:600;
+  }
+
+  .code-trail{
+    display:flex; gap:8px; margin-bottom:16px; min-height:34px; flex-wrap:wrap;
+  }
+  .code-dot{
+    width:32px;height:32px;
+    border:1px solid rgba(238,242,238,0.3);
+    border-radius:3px;
+    display:flex;align-items:center;justify-content:center;
+    font-family:var(--mono); font-size:13px; font-weight:700;
+    transition:all .15s;
+  }
+  .code-dot.filled{background:var(--brass); color:var(--ink); border-color:var(--brass);}
+  .code-dot.wrong{background:var(--alert); color:var(--paper); border-color:var(--alert); animation:shake .3s;}
+  @keyframes shake{25%{transform:translateX(-4px);}75%{transform:translateX(4px);}}
+
+  .buttons{display:flex; gap:10px; flex-wrap:wrap; margin-bottom:18px;}
+  button{
+    font-family:var(--mono);
+    font-size:13px;
+    border:1px solid var(--paper);
+    background:transparent;
+    color:var(--paper);
+    padding:10px 16px;
+    border-radius:3px;
+    cursor:pointer;
+    transition:background .15s, color .15s;
+  }
+  button:hover{background:var(--paper); color:var(--ink);}
+  button.primary{background:var(--brass); border-color:var(--brass); color:var(--ink); font-weight:700;}
+  button.primary:hover{background:#dbb35f;}
+  button.danger{border-color:var(--alert); color:var(--alert);}
+  button.danger:hover{background:var(--alert); color:var(--paper);}
+  button:disabled{opacity:.3; cursor:not-allowed;}
+  button:disabled:hover{background:transparent; color:var(--paper);}
+
+  .log{
+    font-family:var(--mono);
+    font-size:11.5px;
+    line-height:1.7;
+    max-height:120px;
+    overflow-y:auto;
+    border-top:1px solid rgba(238,242,238,0.14);
+    padding-top:10px;
+    opacity:.85;
+  }
+  .log div{opacity:0; animation:fadeIn .3s forwards;}
+  @keyframes fadeIn{to{opacity:1;}}
+  .log .t-alert{color:var(--alert);}
+  .log .t-safe{color:var(--safe);}
+  .log .t-brass{color:var(--brass);}
+
+  .specs{
+    margin-top:28px;
+    border:1px solid var(--line);
+    border-radius:6px;
+    padding:22px 24px;
+    background:#fff;
+  }
+  .specs h3{
+    font-family:var(--mono);
+    font-size:11px;
+    text-transform:uppercase;
+    letter-spacing:.12em;
+    margin:0 0 14px;
+    color:var(--steel);
+  }
+  .specs ul{margin:0; padding-left:18px; font-size:14px; line-height:1.8;}
+  .specs code{
+    background:var(--paper);
+    padding:1px 6px;
+    border-radius:3px;
+    font-family:var(--mono);
+    font-size:12.5px;
+  }
+
+  footer{
+    margin-top:28px;
+    font-family:var(--mono);
+    font-size:11px;
+    color:var(--steel);
+    text-align:center;
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header>
+    <div>
+      <p class="eyebrow">micro:bit · seguridad comercial</p>
+      <h1>Centinela</h1>
+    </div>
+    <div class="badge" id="modeBadge">MODO: PUERTA ÚNICA</div>
+  </header>
+
+  <div class="stage">
+    <div class="status-row">
+      <div class="lamp" id="lamp"></div>
+      <div class="status-text">
+        <span class="label">estado&nbsp;·&nbsp;</span><span class="value" id="statusText">en reposo</span>
+      </div>
+    </div>
+
+    <div class="floor">
+      <div class="shopfront">
+        <div class="door-wrap">
+          <div class="sensor-led" id="sensorLed"></div>
+          <div class="door" id="door"><div class="knob"></div></div>
+        </div>
+        <p class="caption">sensor de apertura · entrada de tienda</p>
+      </div>
+
+      <div class="panel">
+        <h2>Panel de control</h2>
+
+        <div class="code-trail" id="codeTrail"></div>
+
+        <div class="buttons">
+          <button class="primary" id="armBtn">Activar alarma (A)</button>
+          <button class="danger" id="intruderBtn" disabled>Simular apertura</button>
+        </div>
+        <div class="buttons">
+          <button id="btnA" disabled>A</button>
+          <button id="btnB" disabled>B</button>
+          <button id="resetBtn">Reiniciar</button>
+        </div>
+
+        <div class="log" id="log"></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="specs">
+    <h3>Cómo está pensado para una tienda</h3>
+    <ul>
+      <li><strong>Sensor en la puerta:</strong> en vez de un sensor de luz genérico, se monta un <code>sensor magnético de puerta</code> (los mismos que usan las alarmas comerciales) conectado a un pin digital — más confiable que la luz ambiente de un local con vidrieras.</li>
+      <li><strong>Botón A</strong> arma el sistema al cerrar (lo presiona el último empleado en salir).</li>
+      <li><strong>Código de desactivación</strong> con combinación de A/B, igual que el original, pero pensalo como el código que conoce el personal de apertura.</li>
+      <li><strong>Buzzer + texto en la matriz LED</strong> avisan intento de ingreso; podés sumarle un <code>radio.sendString()</code> para que un segundo micro:bit en el mostrador también suene.</li>
+      <li><strong>Código equivocado</strong> reinicia el contador — no permite ir probando combinaciones.</li>
+    </ul>
+  </div>
+
+  <footer>simulador construido para adaptar el proyecto de alarma a un local comercial</footer>
+</div>
+
+<script>
+const CODE = ['A','B','A','A'];
+let progress = [];
+let state = 'idle'; // idle | armed | alarm | disarming
+
+const lamp = document.getElementById('lamp');
+const statusText = document.getElementById('statusText');
+const door = document.getElementById('door');
+const sensorLed = document.getElementById('sensorLed');
+const armBtn = document.getElementById('armBtn');
+const intruderBtn = document.getElementById('intruderBtn');
+const btnA = document.getElementById('btnA');
+const btnB = document.getElementById('btnB');
+const resetBtn = document.getElementById('resetBtn');
+const codeTrail = document.getElementById('codeTrail');
+const logEl = document.getElementById('log');
+
+function log(msg, cls){
+  const div = document.createElement('div');
+  div.textContent = '> ' + msg;
+  if(cls) div.className = cls;
+  logEl.prepend(div);
+  while(logEl.children.length > 30) logEl.removeChild(logEl.lastChild);
+}
+
+function renderTrail(wrong){
+  codeTrail.innerHTML = '';
+  const len = Math.max(CODE.length, progress.length);
+  for(let i=0;i<CODE.length;i++){
+    const d = document.createElement('div');
+    d.className = 'code-dot';
+    if(i < progress.length){
+      d.classList.add(wrong ? 'wrong' : 'filled');
+      d.textContent = progress[i];
+    } else {
+      d.textContent = '·';
+    }
+    codeTrail.appendChild(d);
+  }
+}
+
+function setState(next){
+  state = next;
+  lamp.className = 'lamp';
+  door.classList.remove('open');
+  sensorLed.classList.remove('tripped');
+
+  if(state === 'idle'){
+    statusText.textContent = 'en reposo';
+    armBtn.disabled = false; armBtn.classList.add('primary');
+    intruderBtn.disabled = true;
+    btnA.disabled = true; btnB.disabled = true;
+    door.classList.add('open');
+  }
+  else if(state === 'armed'){
+    lamp.classList.add('armed');
+    statusText.textContent = 'armada';
+    armBtn.disabled = true;
+    intruderBtn.disabled = false;
+    btnA.disabled = true; btnB.disabled = true;
+  }
+  else if(state === 'alarm'){
+    lamp.classList.add('alert');
+    statusText.textContent = 'alarma activada — intruso';
+    sensorLed.classList.add('tripped');
+    door.classList.add('open');
+    armBtn.disabled = true;
+    intruderBtn.disabled = true;
+    btnA.disabled = false; btnB.disabled = false;
+  }
+  else if(state === 'safe'){
+    lamp.classList.add('safe');
+    statusText.textContent = 'desactivada · acceso correcto';
+    armBtn.disabled = false;
+    intruderBtn.disabled = true;
+    btnA.disabled = true; btnB.disabled = true;
+  }
+  renderTrail(false);
+}
+
+armBtn.addEventListener('click', () => {
+  log('sistema armado por el usuario', 't-brass');
+  setState('armed');
+});
+
+intruderBtn.addEventListener('click', () => {
+  log('sensor de puerta activado — apertura detectada', 't-alert');
+  setState('alarm');
+});
+
+function pressKey(key){
+  if(state !== 'alarm') return;
+  progress.push(key);
+  log('tecla presionada: ' + key);
+
+  // chequea si hasta ahora coincide
+  const matchSoFar = progress.every((k,i) => k === CODE[i]);
+
+  if(!matchSoFar){
+    renderTrail(true);
+    log('código incorrecto — contador reiniciado', 't-alert');
+    setTimeout(() => { progress = []; renderTrail(false); }, 450);
+    return;
+  }
+
+  renderTrail(false);
+
+  if(progress.length === CODE.length){
+    log('código correcto — alarma desactivada', 't-safe');
+    progress = [];
+    setState('safe');
+  }
+}
+
+btnA.addEventListener('click', () => pressKey('A'));
+btnB.addEventListener('click', () => pressKey('B'));
+
+resetBtn.addEventListener('click', () => {
+  progress = [];
+  log('sistema reiniciado');
+  setState('idle');
+});
+
+// estado inicial
+setState('idle');
+</script>
+</body>
+</html>
